@@ -1,0 +1,482 @@
+---
+title: " ALY 6050 Module 2 Project: Simulation of Emergency Facilities Readiness"
+author: "Shivangi Vashi, Yihong Qiu, Md Tajrianul Islam "
+date: "3/1/2020"
+output:
+  html_document: default
+---
+
+<style>
+body {
+text-align: justify}
+</style>
+
+
+#### Northeastern University
+#### Course Instructor: Cartik Saravanamuthu
+ 
+# I.	Introduction
+
+A simulation is an implementation of a model over a given period (Qayumi, 2010). When well developed and implemented, a simulation has the potential to bring a model to life and demonstrate how a particular subject or phenomenon will behave. This week’s assignment has introduced us to the concepts of simulation by predicting number of victims expected by hospital and how long it would take to transport the victims to the hospital for the given conditions. We have also performed exploratory data analysis and created charts to show Law of Large Numbers in action for Beth Israel Medical hospital. The data used for analysis is part of planning projects to determine how effectively local emergency facilities such as local hospitals can handle natural disasters (weather, fire,...).
+
+
+\center # Analysis \center
+
+# Part1
+
+### 5000 Simulations of Disaster Victims 
+
+I first simulated 5000 random values using triangular probability distribution function with minimum 20 victims, maximum 300 and a peak of 80 victims, since the information says that the total number of victims is best approximated by a triangular probability distribution.
+
+```{r}
+
+a<-20
+b<-300
+c<-80
+
+sim<-runif(5000)
+
+ A<-a+sqrt((b-a)*(c-a)*sim) 
+ B<-b-sqrt((b-a)*(b-c)*(1-sim)) 
+ C<-(c-a)/(b-a) 
+ Tdist<-ifelse(sim<C,A,B)
+Hospital<-c("Beth Israel Medical", "Tufts Medical", "Massachusetts General", "Boston Medical", "Brigham and Women's")
+TTinMins<-c(18,12,20,8,15)
+TTinHrs<-TTinMins/60
+HosAlloc<-c(0.15,0.2,0.2,0.3,0.15)
+Hos_TT_Allocation<-data.frame(Hospital,HosAlloc,TTinMins,TTinHrs)
+Hos_TT_Allocation
+#Hospital_Allocation<-data.frame(Hospital,HosAlloc)
+
+
+```
+
+
+### Part 1 a. Average Number of Victims that can be expected in each hospital
+
+Then, using the allocation percentages for each hospital, I calculated Average number of victims that can be expected at each hospital as seen below.
+```{r}
+#Allocated victims for each simulation for the hospitals
+BIM<-HosAlloc[1]*Tdist
+Tufts<-HosAlloc[2]*Tdist
+MG<-HosAlloc[3]*Tdist
+BM<-HosAlloc[4]*Tdist
+Brigham<-HosAlloc[5]*Tdist
+
+Hospital_Allocated_Table<-data.frame(BIM,Tufts,MG,BM,Brigham)
+
+
+#Avg number of victims expected at each hospital
+AvgNumVict<-data.frame("Hospital"=Hospital,"AvgNumofVictims"=c(mean(BIM),mean(Tufts),mean(MG),mean(BM),mean(Brigham)))
+AvgNumVict
+
+```
+
+
+### 1. b. Avg Total Time in Hours
+
+For each hospital, I then calculated the average total time in hours needed to transport all the victims using the given transport time
+```{r}
+#Avg Total time in hours to transport all victims
+AvgTimeinHrs<-AvgNumVict$AvgNumofVictims*Hos_TT_Allocation$TTinHrs
+AvgTimeinHours<-data.frame("Hospital"=Hospital,"AvgTimeinHours"=AvgTimeinHrs)
+AvgTimeinHours
+
+```
+
+
+### 1.c Law of Large Numbers  for Beth Israel Medical
+
+The law of large numbers states that as the number of trials becomes larger, the observed average approaches the theoretial average. I created a scatter plot that shows that as the sample size increases, the sample observed mean will approach the theoretical mean
+I did this for a sample size of 1, 2, and so on upto a sample size of 500.
+
+```{r}
+
+
+library(ggplot2)
+
+#meanIBM<-mean(BIM)
+max_sample_size<-500
+mean_vec<-rep(0,max_sample_size) # mean of samples
+for(n in 1:max_sample_size){
+  values<-sample(BIM,n) 
+  mean_vec[n]<-mean(values)
+}
+
+df<-data.frame("No_Samples"=seq(1,max_sample_size),"Mean_Vec"=mean_vec)
+gplot<-ggplot(df,
+       aes(seq(1,max_sample_size),mean_vec))+ 
+       geom_point() +
+       geom_hline(yintercept = mean(BIM),color="blue")
+
+LawofLN<-gplot+labs(title="Law of Large Numbers Demonstrated for Beth Israel Medical", x="Sample Size", y="Sample Mean")
+LawofLN
+
+```
+
+
+The blue line represents the theoretial mean for Beth Isreal Medical.
+As is observed, as the sample size increases, the sample means come close to this theoretical mean, hence proving the law of large numbers, showing the Law of Large Number in action for the Beth Israel Medical 
+
+
+
+### 1. d. i 95% Confidence interval for total transport time 
+
+To find the 95% confidence interval for the total transport time for the Beth Israel Medical hospital, we first had to create an object BIMTT and calculate the total transport time with the use of the 5000 simulations and then used the library Rmisc to calculate to confidence interval with a single line of code. The code used to find 95% confidence interval is given below:
+```{r}
+library(Rmisc)
+
+BIMTT <- BIM*TTinHrs[1]
+CI(BIMTT, ci=0.95)
+
+```
+
+Which gave us an upper boundary 6.074757  and lower boundary 5.922852
+
+### 1. d. ii  Determining probability distribution that best fits the total transport time in hours
+
+To find the best fitted probability distribution for total transport time in hours we used the library MASS and the function fitdistr. We had to compare and find the highest loglik value to find the best fitter probability distribution. The value found for the gamma test was -11821.4 and was the highest, so we can say it is a gamma distribution.
+
+
+
+
+```{r}
+library(MASS)
+# checking best fit distribution using logarithmic likelihood: whichever has the highest loglik value is the best fitting probability distribution
+fitdistr(BIMTT, "t", lower = 0.01)$loglik                                              
+fitdistr(BIMTT, "normal", lower = 0.01)$loglik                                      
+fitdistr(BIMTT, "logistic", lower = 0.01)$loglik                                                    
+fitdistr(BIMTT, "weibull", lower = 0.01)$loglik                                                     
+fitdistr(BIMTT, "gamma", lower = 0.01)$loglik                                                     
+fitdistr(BIMTT, "lognormal", lower = 0.01)$loglik                                                  
+fitdistr(BIMTT, "exponential", lower = 0.01)$loglik
+
+
+```
+
+
+### d. iii Chi- Square Test for Goodness of Fit 
+
+To check if our assumption was right, we find the probability distribution values by pgamma() fuction and perform Chi-squared Goodness of fit test using chisq.test() function. The codes are given below:
+
+```{r}
+
+fitdistr(BIMTT, "gamma")
+
+s1 <- 4.63559370
+r1 <- 0.77543095
+
+#Since gamma has largest, we find probability distribution values
+gammadistvalue <- pgamma(BIMTT,s1,r1)
+
+#Perform chi-square test of goodness of fit on the same
+ctest<-chisq.test(gammadistvalue)
+
+#function to print whether null is rejected or not rejected
+test_classify <- function(test_object, alpha) 
+{
+  # reject NULL if p-value < alpha ,0.05, ie doesnt fit the distribution
+
+  if (test_object["p.value"] < alpha)
+  {
+    print(sprintf("NULL hypothesis should be rejected for `%s` test. p-value=%f is smaller than alpha=%#.4f", 
+            test_object["method"], test_object["p.value"],alpha))
+    boolean_reject = TRUE
+  } else {
+    print(sprintf("NULL hypothesis cannot be rejected for `%s` test. p-value=%f is greater or equal than alpha=%#.4f", 
+            test_object["method"], test_object["p.value"],alpha))
+    boolean_reject = FALSE
+  }
+  return (boolean_reject)
+}
+
+boolean_result = test_classify(ctest, 0.05)
+cat("Reject NULL hypothesis:", boolean_result)
+
+```
+
+
+### e. Exploratory Analysis of t
+
+Similar to part d, we explored the average transport time (in minutes) per victim for the entire process of transporting all victims. First fitting the distributions, using the logarithmic likelihood value to see which one fits best, and then supporting our assertion by performing the chi square goodness of fit test.
+
+```{r}
+#Constructing t
+
+library(MASS)
+AvgTTforAllVictims<-colMeans(Hospital_Allocated_Table)*TTinMins
+AvgTTforAllVictims
+
+
+
+# Checking distributions using logarithmic likelihood
+fitdistr(AvgTTforAllVictims, "t", lower = 0.01)$loglik                                                
+fitdistr(AvgTTforAllVictims, "normal", lower = 0.01)$loglik                                          
+fitdistr(AvgTTforAllVictims, "logistic", lower = 0.01)$loglik                                                    
+fitdistr(AvgTTforAllVictims, "weibull", lower = 0.01)$loglik                                                     
+fitdistr(AvgTTforAllVictims, "gamma", lower = 0.01)$loglik                                                     
+fitdistr(AvgTTforAllVictims, "lognormal", lower = 0.01)$loglik                                                  
+fitdistr(AvgTTforAllVictims, "exponential", lower = 0.01)$loglik
+
+
+fitdistr(AvgTTforAllVictims,"exponential")
+
+
+
+rate<-0.002700442
+##Confidence Interval of T
+CI(AvgTTforAllVictims,0.95)
+
+#Exponential dsitribution values of t
+expondistvalues<-pexp(AvgTTforAllVictims, rate)
+
+
+c_tttest<-chisq.test(expondistvalues)
+
+#function to print whether null is rejected or not rejected
+test_classify <- function(test_object, alpha) 
+{
+  # reject NULL if p-value < alpha ,0.05, ie doesnt fit the distribution
+
+  if (test_object["p.value"] < alpha)
+  {
+    print(sprintf("NULL hypothesis should be rejected for `%s` test. p-value=%f is smaller than alpha=%#.4f", 
+            test_object["method"], test_object["p.value"],alpha))
+    boolean_reject = TRUE
+  } else {
+    print(sprintf("NULL hypothesis cannot be rejected for `%s` test. p-value=%f is greater or equal than alpha=%#.4f", 
+            test_object["method"], test_object["p.value"],alpha))
+    boolean_reject = FALSE
+  }
+  return (boolean_reject)
+}
+
+boolean_result = test_classify(c_tttest, 0.05)
+cat("Reject NULL hypothesis:", boolean_result)
+```
+
+
+# Part 2
+
+### 2. a. 5000 Simulations of Normally distributed disaster victims 
+
+In part2, the total number of victims are assumed to be normally distributed. 
+I first simulated 5000 random values using normal distribution function using mean of 150 victims and standard deviation of 50 vicitms.
+
+I then created all the tables given in the instructions that will be used in the calculations.
+```{r}
+
+Ndist<-rnorm(n=5000,150,50)
+TTinMins2<-c(18,12,20,8,15)
+SDinMins<-c(4,5,3,2,5)
+TTinHrs2<-TTinMins2/60
+HosAlloc<-c(0.15,0.2,0.2,0.3,0.15)
+```
+
+### 2.a Average Number of Victims in each hospital
+
+I then found the Average number of victims in each hospital and average time to transport all victims in a similar fashion as Part 1:
+
+```{r}
+#Allocated victims for each simulation for the hospitals
+BIM2<-rnorm(Ndist,18,4)
+Tufts2<-rnorm(Ndist,12,5)
+MG2<-rnorm(Ndist,20,3)
+BM2<-rnorm(Ndist,8,2)
+Brigham2<-rnorm(Ndist,15,5)
+
+Hospital_Allocated_Table2<-data.frame(BIM2,Tufts2,MG2,BM2,Brigham2)
+
+#Avg number of victims expected at each hospital
+AvgNumVict2<-data.frame("Hospital"=Hospital,"AvgNumofVictims2"=c(mean(BIM2),mean(Tufts2),mean(MG2),mean(BM2),mean(Brigham2)))
+AvgNumVict2
+```
+
+### 2. b.  Avg Time in Hours
+
+```{r}
+
+#Avg Total time in hours to transport all victims
+AvgTimeinHrs2<-AvgNumVict2$AvgNumofVictims2*TTinHrs2
+AvgTimeinHours2<-data.frame("Hospital"=Hospital,"AvgTimeinHours2"=AvgTimeinHrs2)
+AvgTimeinHours
+
+```
+
+### 2 c. Law of Large Numbers  for Beth Israel Medical
+
+Law of large numbers is shown for the average number of victims expected in Beth Israel Medical for a normally distributed frequency of disaster victims.
+```{r}
+
+
+library(ggplot2)
+
+
+max_sample_size2<-500
+mean_vec2<-rep(0,max_sample_size2) # mean of samples
+for(n in 1:max_sample_size2){
+  values2<-sample(BIM2,n) 
+  mean_vec2[n]<-mean(values2)
+}
+
+
+df<-data.frame("No_Samples"=seq(1,max_sample_size2),"Mean_Vec"=mean_vec2)
+gplot<-ggplot(df,
+       aes(seq(1,max_sample_size2),mean_vec2))+ 
+       geom_point() +
+       geom_hline(yintercept = mean(BIM2),color="blue")
+
+LawofLN2<-gplot+labs(title="Law of Large Numbers Demonstrated for Beth Israel Medical", x="Sample Size", y="Sample Mean")
+LawofLN2
+
+```
+
+### d. i 95% Confidence interval for total transport time 
+
+We followed the same procedure as part 1 to find the confidence interval. Which gave us an upper boundary 5.437375 and lower boundary 5.371316.
+```{r}
+library(Rmisc)
+
+
+
+BIM2TT <- BIM2*TTinHrs2[1]
+CI(BIM2TT, ci=0.95)
+
+```
+
+###  d. ii  Determining probability distribution that best fits the total transport time in hours
+
+We followed the same procedure as part 1 to find the best fit for probability distribution and the highest loglik value was for Normal Distribution.
+
+So after finding the shape and rate of the normal distribution we ran the Chi-squared Goodness of fit test and found out the p value is ~1.000000 which is greater or equal than alpha=0.0500. So NULL hypothesis cannot be rejected.
+
+```{r}
+library(MASS)
+# checking best fit distribution using logarithmic likelihood: whichever has the highest loglik value is the best fitting probability distribution
+fitdistr(BIM2TT, 't', lower = 0.01)$loglik                                                
+fitdistr(BIM2TT, 'normal', lower = 0.01)$loglik                                          
+fitdistr(BIM2TT, 'logistic', lower = 0.01)$loglik                                                    
+#cannot be gamma,exp etc because values arent >=0
+
+fitdistr(BIM2TT,"normal")
+mean<-5.40055321 
+sd<- 1.17743550 
+#Since normal has largest, we find probability distribution values
+normaldistvalue <- pnorm(BIM2TT,mean,sd)
+
+#Perform chi-square test of goodness of fit on the same
+c_normtest<-chisq.test(normaldistvalue)
+
+#function to print whether null is rejected or not rejected
+test_classify <- function(test_object, alpha) 
+{
+  # reject NULL if p-value < alpha ,0.05, ie doesnt fit the distribution
+
+  if (test_object["p.value"] < alpha)
+  {
+    print(sprintf("NULL hypothesis should be rejected for `%s` test. p-value=%f is smaller than alpha=%#.4f", 
+            test_object["method"], test_object["p.value"],alpha))
+    boolean_reject = TRUE
+  } else {
+    print(sprintf("NULL hypothesis cannot be rejected for `%s` test. p-value=%f is greater or equal than alpha=%#.4f", 
+            test_object["method"], test_object["p.value"],alpha))
+    boolean_reject = FALSE
+  }
+  return (boolean_reject)
+}
+
+boolean_result = test_classify(c_normtest, 0.05)
+cat("Reject NULL hypothesis:", boolean_result)
+
+```
+
+
+
+### 2. e Exploratory analysis of average transport time in minutes per victim for entire process of transporting all victims (t)
+
+
+```{r}
+#Constructing t
+
+library(MASS)
+AvgTTforAllVictims2<-colMeans(Hospital_Allocated_Table2)*TTinMins2
+AvgTTforAllVictims2
+
+
+# Checking distributions using logarithmic likelihood
+fitdistr(AvgTTforAllVictims2, 't', lower = 0.01)$loglik                                                
+fitdistr(AvgTTforAllVictims2, 'normal', lower = 0.01)$loglik                                          
+fitdistr(AvgTTforAllVictims2, 'logistic', lower = 0.01)$loglik                                                     
+fitdistr(AvgTTforAllVictims2, 'gamma', lower = 0.01)$loglik                                                     
+fitdistr(AvgTTforAllVictims2, 'lognormal', lower = 0.01)$loglik                                                  
+fitdistr(AvgTTforAllVictims2, 'exponential', lower = 0.01)$loglik
+
+#gamma has largest hence gamma fits best
+fitdistr(AvgTTforAllVictims2,"gamma")
+s2<-2.924021920
+r2<-0.012650868 
+##Confidence Interval of T
+CI(AvgTTforAllVictims2,0.95)
+
+#Exponential dsitribution values of t
+gammadistvalues2<-pgamma(AvgTTforAllVictims2,s2, r2)
+
+
+c_gtest<-chisq.test(gammadistvalues2)
+
+#function to print whether null is rejected or not rejected
+test_classify <- function(test_object, alpha) 
+{
+  # reject NULL if p-value < alpha ,0.05, ie doesnt fit the distribution
+
+  if (test_object["p.value"] < alpha)
+  {
+    print(sprintf("NULL hypothesis should be rejected for `%s` test. p-value=%f is smaller than alpha=%#.4f", 
+            test_object["method"], test_object["p.value"],alpha))
+    boolean_reject = TRUE
+  } else {
+    print(sprintf("NULL hypothesis cannot be rejected for `%s` test. p-value=%f is greater or equal than alpha=%#.4f", 
+            test_object["method"], test_object["p.value"],alpha))
+    boolean_reject = FALSE
+  }
+  return (boolean_reject)
+}
+
+boolean_result = test_classify(c_gtest, 0.05)
+cat("Reject NULL hypothesis:", boolean_result)
+```
+
+
+## Part4: 
+### Qualitative and Quantitative differences between simulation outputs of Parts 1 and 2
+Simulation 1 performs a triangular probability distribution with minimum, maximum and peak value. Simulation 2 performs a normally distribution with mean and standard deviation.
+The difference between simulation 1 and 2 is the range of output. Simulation 1 has finite range of data output, while simulation 2 has infinite range. In addition, triangular distributed simulation variables are not symmetric, however, normally distributed simulation variables are symmetric.
+
+
+## Part5: 
+### How the information can be used for planning purposes:
+In the first part we assume the data is triangularly distributed, and we simulate according to that scenario. When we know little about what to expect during a disaster, we could use the results of Part1 and to see how many victims each hospital could take, and also how long it would take to transport all victims to the five hospitals, and accoringly add more transport vehicles and plan road diversions to minimize time taken.
+If we have more information on the scenario and know that total number of victims are normally distributed, we can again find out how many victims each hospital can accomodate and also total transport time for each.
+Since we also modeled t, ie average time it takes to transport the victims, we have a better idea on how long it will take to transport given number of victims for any scenario.
+In this way University administrators can be better prepared in the event of a disaster.
+
+
+## Part6:
+### How each simulation can be changed to provide additional useful information
+It would be helpful if the victims can be categorized according to severity of injusries, if such data can be provided and simulated, and then the allocation can be performed considering this parameter. The simulation will help better allocate resources and optimize the workflow. A detailed study on this is given in (Sukho Jin, 2014). 
+
+# I.	Conclusion
+
+The simulation procedure involves conducting experiments which closely resemble an actual situation in order to provide answers to real life problems. Practical problems from the very simple to the most complex can be solved (or at least approximated) by using simple simulation. Our analysis of the given data can help authorities to plan ahead for emergency situations. Being able to estimate the expected number of victims, can help hospitals to pre plan have the required number of doctors and nurses ready if such situation occurs. Also, if we can guess the average victim transportation time, we can prioritize depending on the severity of the victims or choose closest hospital as we also know the average time taken to reach particular hospitals. In this assignment, we learned different R functions to do descriptive, heuristic and prescriptive analysis.
+
+
+### Works Cited
+
+Qayumi, A. K. (2010). Centre of Excellence for Simulation Education and Innovation (CESEI). Journal of Surgical Education, 266-269.
+
+Dr. Nic. (2013). Creative Maths. Let’s hear it for the Triangular Distribution. Retrieved from
+https://creativemaths.net/blog/triangular-dist/
+
+Sukho Jin, S. J. (2014). logistics model for the transport of disaster victims with various injuries and survival probabilities. Annals of Operations Research , 17-33. Retrieved from https://link.springer.com/article/10.1007/s10479-013-1515-0
+
+

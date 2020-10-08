@@ -1,0 +1,331 @@
+---
+title: " ALY 6050 Module 3 Project: Regression Model Analysis for housing prices"
+author: "Shivangi Vashi, Yihong Qiu, Md Tajrianul Islam"
+output:
+  html_document:
+    df_print: paged
+---
+ 
+ <style>
+body {
+text-align: justify}
+</style>
+
+#### Northeastern University
+#### Course Instructor: Cartik Saravanamuthu
+
+# Introduction
+Linear regression attempts to model the relationship between two variables by fitting a linear equation to observed data. One variable is considered to be an explanatory variable, and the other is considered to be a dependent variable. This week’s assignment has introduced us to the concepts of regression by creating training and testing dataset, training model and test its prediction capabilities, calculating Residual Sum of Squares method on the errors, finding  variable pairs which are strongly correlated, identifying predictors that has the maximum value of the Coefficient of Determination  and predicting the values of a randomly selected set based on the predictors. The data used for analysis contains the house price listings of over 3000 houses, with 20 different predictors.
+
+
+
+## Step 1
+
+We first split the given house data set into training and testing data set in the mentioned 4:1 ratio. Hence, the house data is sampled with 80% of the records being stored in train_data, and the remaining 20% in test_data. We set a seed, because everytime we run the code we want the sampled trained and test data sets to be reproducible.
+Since we need date variable to see whether it may have a high correlation with price, we reformat it and extract year from it.
+
+
+```{r}
+library(ISLR)
+library(dplyr)
+library(lubridate)
+
+#importing data
+Housedata <- read.csv("/Users/shivangi/Documents/Analytics/Quarter 2/ALY6050 Enterprise/housePractice.csv", header = TRUE)
+
+#reformating date variable
+Housedata$date<-(substr(Housedata$date, 1, 8))
+Housedata$date<- ymd(Housedata$date)
+Housedata$date<-as.Date(Housedata$date, origin = "1900-01-01")
+Housedata <- Housedata %>% mutate(date = (format(as.Date(date), "%Y")))
+
+da <- Housedata$date
+
+Housedata <- Housedata %>% mutate(date = as.numeric(da))
+
+
+#setting sample size to 80% of data
+smp_siz <- floor(0.80*nrow(Housedata)) 
+
+set.seed(smp_siz)   # set seed to ensure you always have same random numbers generated
+train_ind <- sample(seq_len(nrow(Housedata)),size = smp_siz)
+#splitting data into train and test
+train_data <-Housedata[train_ind,]
+test_data<-Housedata[-train_ind,]
+
+
+```
+
+
+## Step 2
+### Part 1
+In step 2, we first remove the id column since it does not have any relation with price.
+Then, we create a correlation matrix using cor() function, to find the correlation coefficient for all variable pairs present in the data. This gives us a 20x20 matrix for correlation coefficient values of all of the variables.
+
+We then plot this to view the correlation using ggcorrplot(). We can visually see which variables have a strong correlation with the price value.
+
+Next, we want to find a set of variables that have a correlation greater than |0.5| with price, which would show a strong positive or negative correlation with price. This is stored in the 'features' table.
+(Note, this will also select price as a variable, since the correlation of price with itself is 1, but we don't want that, and hence we put an 'and' condition , to select features if correlation is also <1.)
+
+Now, we want to subset this to have correlation information for only the price column, we do this on line 81.
+
+```{r fig.width=14, fig.height=12}
+library(ggplot2)
+library(ggcorrplot)
+library(gridExtra)
+library(corrplot)
+
+train_data<-train_data[-c(1)] #remove id
+
+#correlation matrix to find correlations in the data
+corr_train<-as.data.frame(cor(train_data))
+
+#plotting correlation matrix
+ggcorrplot(corr_train,hc.order = TRUE, type = "lower", outline.col = "purple",
+           ggtheme = theme_gray,lab = TRUE) + ggtitle("Correlation Matrix for Training Data")
+
+
+#subsetting variables with highest correlations with price
+features<-subset(corr_train, subset = corr_train$price>=0.5 & corr_train$price< 1 | corr_train$price<=-0.5)
+
+#removing correlation coefficient of variables other than price
+features<-features[-c(1,3:24)]
+
+features<-cbind(rownames(features),data.frame(features,row.names = NULL))
+
+as.data.frame(features, row.names = NULL,
+              cut.names = FALSE,
+              stringsAsFactors = default.stringsAsFactors())
+# names of features strongly correlated with price
+colnames(features)<- c("Feature.Names","price_coeff")
+
+#Feature with highest correlation
+StrongFactor<-max(features$price_coeff)
+StrongFactor
+
+sf<-filter(features, price_coeff == StrongFactor)
+
+sprintf("The feature with the highest correlation is: %s",sf[[1]][[1]])
+
+```
+
+
+
+
+
+
+
+Finally, to make our first simple regression model, we find the strongest factor ie the factor with the highest correlation with price. This is found to be sqft_living.
+
+### Part2: Simple Linear Regression of Price against Sqft_Living
+We now create a linear regression model of price with sqft_living. We feed it the train_data values, and then visualize it.
+
+We then find the RMSE, Root Mean Square Error, which is the standard deviation of the residuals, ie the prediction errors. A higher value indicates the model isn't good.
+
+```{r}
+library(modelr)
+library(MASS)
+
+#Regression model of SQFT Living against price
+SLRmodel<-lm(data=train_data,price~sqft_living)
+summary(SLRmodel)$r.squared
+
+#visualizing regression model
+SLR<-ggplot(train_data, aes(y=price,x=sqft_living))+geom_point(alpha=0.15)+ stat_smooth(method="lm", se=FALSE)
+SLR
+
+#testing model
+testSLR<-predict(SLRmodel,test_data)
+plot(testSLR~test_data$price)
+
+#Root mean square test error
+rmse_test <- rmse(SLRmodel, test_data)
+sprintf("Test error for simple regression model is: %# .2f",rmse_test)
+```
+
+The rmse() function therefore calculates residuals and gives the test error value, which is found to be 267874.8. Next, we try to see whether we can improve our model and accuracy.
+
+
+### Part3: Multiple regression model 
+
+To improve the accuracy, we add more variables to improve our accuracy. We now create a model with all the top 5 variables we found during feature selection, ie bathrooms, sqft_living, grade, sqft_above, and sqft_living15.
+- bathrooms is number of bathrooms.
+- sqft_living is the square footage of the interior living space.
+- grade is an index from 1-13, which is a range of values giving level of construction and design for the building.
+- sqft_above is the square footage of housing space above ground level.
+- sqft_living15 is the square footage of interior housing living space for the   nearset 15 neighbours.
+
+
+We therfore filter the train dataset to include only these variables, and then create the multiple regression model MLR.
+We perform backward elimination using stepAIC and regsubsets() which shows us that for a model with maximum allowed variables 5, which variables should be selected when nvar=1:5. ie, if the model has to have 1 feature, which feature should be selected, if the model has to have 2 features, what makes the best 2 feature model, and so on.
+
+
+```{r}
+
+library(GGally) 
+library(leaps)
+library(caret)
+
+
+features$Feature.Names
+#Filtering training data set with having only highly correlated features
+filtered.train.data <- dplyr::select(train_data, price,bathrooms, sqft_living, grade, sqft_above, sqft_living15)
+
+#plotting pairs
+# plot1<-ggpairs(data=filtered.train.data,
+#     mapping = aes(color = "dark green"),
+#     axisLabels="show")
+# plot1
+
+#multiple regression model with all 5 variables
+MLR<-lm(price~.,data=filtered.train.data)
+
+#backward stepwise feature selection
+stepMLR<-stepAIC(MLR,direction = "backward",trace = FALSE)
+summary(stepMLR)
+
+#Backward elimination of features showing best features for nvmax number of variables selected
+models <- regsubsets(price~., data = filtered.train.data, nvmax = 5, method = "backward")
+summary(models)
+
+
+#Training models and testing them to find lowest error and highest R squared
+set.seed(123)
+# Set up repeated k-fold cross-validation
+train.control <- trainControl(method = "cv", number = 2)
+# Train the model
+step.model <- train(price~., data = filtered.train.data,
+                    method = "leapBackward", 
+                    tuneGrid = data.frame(nvmax = 1:5),
+                    trControl = train.control
+                    )
+step.model$results
+step.model$bestTune
+
+
+# RSS<-summary(MLR)
+# sum(resid(MLR)^2)
+#residual standard error
+# sum(RSS$residuals^2)
+
+#since we have proved that 5 variable model is the best model, we choose that model
+
+```
+We create 5 models like this, and step.model$results shows us that the best model to choose is the 5 variable model, since it has the lowest rmse and highest Rsquared value.
+
+## Step 3: Test error for Regression Model
+
+We there create the Multivariate regression model MLR and find its root mean square error to be 257301.77.
+```{r}
+rmseMLR<-rmse(MLR,test_data)
+sprintf("Root mean square error for the multiple regression model is: %# .2f", rmseMLR)
+```
+
+
+## Step 4
+
+We now create 4 splits of the data into training and testing datasets respectively. I created a function that samples the data splits the data, and then creates a regression model for that sample. I also found the RSE, residual sum of squares error for each model.
+
+Using a loop, I automated the process to find the errors for each model and stored them in test_error vector. 
+```{r}
+#Function to split data into train and test data four times, and then creating a Multiple regression model for each
+train_test_function<-function(model)
+{
+  
+  train_ind <- sample(seq_len(nrow(Housedata)),size = smp_siz)
+  train_data <-Housedata[train_ind,]
+  test_data <- Housedata[-train_ind,] 
+  filtered.train.data <- dplyr::select(train_data, price,bathrooms, sqft_living, grade, sqft_above, sqft_living15)
+  model<-lm(price~.,data=filtered.train.data)
+  model_summary<-summary(model)
+  #Calculating Residual Standard error
+  rse <- sqrt( sum(residuals(model)^2) / model$df.residual ) 
+  return(rse)
+}
+set.seed(132)
+#finding test error for the 4 models 
+test_error <-vector()
+for(i in 1:4)
+{
+  test_error[i]<-train_test_function(model)
+  
+}
+
+test_error
+
+#mean erorr for models
+sprintf("The average test error for the four models is: %# .2f",mean(test_error))
+
+
+```
+I found the average test error across all of the training and testing data splits to be 247745.93.
+
+
+## Step 5: Checking for collinearity between all predictor variables
+
+High correlation among predictors means you can predict one variable using second predictor variable. This is called the problem of multicollinearity. This results in unstable parameter estimates of regression which makes it very difficult to assess the effect of independent variables on dependent variables. To solve this problem, we can use ridge regression.
+
+At first we created a 20X20 matrix using ggcorplot. Then we created a function to find out the variable pairs that are highly correlated. The main impact of collinearity is loss of statistical power to detect effects or precisely estimate individual predictors. The best remedy may be to increase sample size, but it could also be sensible to re-parameterize the model, transform data or use data reduction methods (depending on your goal). High correlation among predictor variables can be dealed also with a penalized likelihood function (Ridge Regression, Lasso). Principal Component Analysis is also a common technique but if your predictor variables are measured in different scale you have to standardize the data matrix prior to the PCA.
+```{r fig.width=14, fig.height=12}
+# 20X20 matrix for covariance between all pairs
+ggcorrplot(corr_train,hc.order = TRUE, type = "full", outline.col = "purple", 
+           ggtheme = theme_gray,lab = TRUE) + ggtitle("Correlation Matrix for Training Data")
+
+# function for finding the variable pairs that are highly correlated
+corr_check <- function(corr_train, threshold){
+
+  for (i in 1:nrow(corr_train)){
+    correlations <-  which((abs(corr_train[i,i:ncol(corr_train)]) > threshold) & (corr_train[i,i:ncol(corr_train)] != 1))
+  
+    if(length(correlations)> .70){
+      lapply(correlations,FUN =  function(x) (cat(paste(colnames(corr_train)[i], "with",colnames(corr_train)[x]), "\n")))
+     
+    }
+  }
+}
+
+corr_check(corr_train, 0.70)
+
+```
+
+
+##Step 6: Model Parsimony: Finding 3 predictor variables with maximum coefficient of determination
+
+According to the previous results in Step 2, we get the correlations between house price and different variables, then we find out the top 3 predictors that have the highest correlations with house price from these variables. They are sqft_living, grade, and sqft_above. We generate the multiple linear regression of the house price and these three variables as shown below, and we also calculate the R-square of the set of these 3 predictors which is 54.11%. The R-square indicates that this multiple linear regression model with 3 preditors is a good model.
+```{r}
+features
+Bestpredictors <-top_n(features,3)
+Bestpredictors
+Housedatalm<-lm(price~sqft_living+grade+sqft_above,Housedata)
+summary(Housedatalm)$r.squared
+
+
+sprintf("The R-square of the top 3 predictors is : %# f", summary(Housedatalm)$r.squared)
+
+```
+
+
+## Step7: Testing 3 variable regression model on a sample set of 100 house prices and finding test error
+
+We randomly selected a set of 100 houses from the housing data set, then we apply the model we get from Step 6 to these 100 sample values. The residual standard error of the model is 248700, the new test error of the model averaged across the 100 houses is shown below:
+```{r}
+# Predict the values of a randomly selected set of 100 houses
+set.seed(100)
+random100 <- Housedata[sample(nrow(Housedata),100),]
+#Test error of the model for 100 random values
+summary(Housedatalm)
+rmsenew<-rmse(Housedatalm,random100)
+rmsenew
+
+sprintf("The new test error of our parsimonious model with 3 predictors is : %# .2f", rmsenew)
+
+```
+
+# I.	Conclusion
+The regression procedure involves conducting experiments which closely resemble an actual situation in order to provide answers to real life problems. Linear regression can be used in practical situations like this to predict the value of a variable (house prices) based on the value of other variables. Our analysis of the given data can help a real-estate businessman or anyone who is willing to invest in housing to make predictions of a house price. In this assignment, we learned different R functions to do regression analysis and find the accuracy of the model. 
+
+
+
+
+
+
